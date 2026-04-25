@@ -1,6 +1,14 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { DndContext, closestCorners, DragEndEvent, DragStartEvent, DragOverEvent } from '@dnd-kit/core';
+import { 
+  DndContext, 
+  closestCorners, 
+  DragEndEvent, 
+  PointerSensor, 
+  TouchSensor, 
+  useSensor, 
+  useSensors 
+} from '@dnd-kit/core';
 import { arrayMove, SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
 import { v4 as uuidv4 } from 'uuid';
 import { Column } from './Column';
@@ -11,6 +19,16 @@ export default function KanbanBoard() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [isMounted, setIsMounted] = useState(false);
   const [newColTitle, setNewColTitle] = useState('');
+
+  // SENSÖRLER: Mobil ve Masaüstü ayrımı için kritik ayar
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 }, // 5px hareket etmeden sürükleme başlamaz (tıklama ile karışmaz)
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 250, tolerance: 5 }, // Mobilde 250ms basılı tutunca sürükleme başlar (scroll ile karışmaz)
+    })
+  );
 
   useEffect(() => {
     setIsMounted(true);
@@ -24,46 +42,22 @@ export default function KanbanBoard() {
     if (tks) setTasks(tks);
   };
 
-  // --- SÜTUN İŞLEMLERİ ---
   const handleAddColumn = async () => {
     if (!newColTitle.trim()) return;
-    const newCol = {
-      id: uuidv4(),
-      title: newColTitle,
-      position: columns.length + 1,
-      board_id: '11111111-1111-1111-1111-111111111111' 
-    };
+    const newCol = { id: uuidv4(), title: newColTitle, position: columns.length + 1 };
     setColumns([...columns, newCol]);
     setNewColTitle('');
     await supabase.from('columns').insert(newCol);
   };
 
   const handleDeleteColumn = async (colId: string) => {
-    if (!confirm("Bu sütunu ve içindeki tüm görevleri silmek istediğine emin misin?")) return;
+    if (!confirm("Sütun ve içindeki tüm görevler silinecek. Onaylıyor musun?")) return;
     setColumns(columns.filter(c => c.id !== colId));
     setTasks(tasks.filter(t => t.column_id !== colId));
     await supabase.from('tasks').delete().eq('column_id', colId);
     await supabase.from('columns').delete().eq('id', colId);
   };
 
-  // --- GÖREV İŞLEMLERİ ---
-  const handleAddTask = async (columnId: string, title: string) => {
-    const newTask = {
-      id: uuidv4(),
-      column_id: columnId,
-      title: title,
-      position: tasks.filter(t => t.column_id === columnId).length + 1
-    };
-    setTasks([...tasks, newTask]);
-    await supabase.from('tasks').insert(newTask);
-  };
-
-  const handleDeleteTask = async (taskId: string) => {
-    setTasks(tasks.filter(t => t.id !== taskId));
-    await supabase.from('tasks').delete().eq('id', taskId);
-  };
-
-  // --- SÜRÜKLE BIRAK (ON DRAG END) ---
   const onDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over) return;
@@ -73,7 +67,7 @@ export default function KanbanBoard() {
 
     if (activeId === overId) return;
 
-    // A. SÜTUN SÜRÜKLEME
+    // A. SÜTUN TAŞIMA (YATAY)
     const isActiveAColumn = active.data.current?.type === 'Column';
     if (isActiveAColumn) {
       const oldIndex = columns.findIndex(c => c.id === activeId);
@@ -81,18 +75,19 @@ export default function KanbanBoard() {
       const newCols = arrayMove(columns, oldIndex, newIndex);
       setColumns(newCols);
       
-      // DB Güncelleme (Position)
+      // DB'de pozisyonları güncelle
       newCols.forEach(async (col, idx) => {
         await supabase.from('columns').update({ position: idx }).eq('id', col.id);
       });
       return;
     }
 
-    // B. GÖREV SÜRÜKLEME
+    // B. GÖREV TAŞIMA (DİKEY VE SÜTUNLAR ARASI)
     const activeTask = tasks.find(t => t.id === activeId);
     const isOverAColumn = columns.some(col => col.id === overId);
 
     if (isOverAColumn && activeTask) {
+      // Boş sütuna bırakma
       if (activeTask.column_id !== overId) {
         setTasks(prev => prev.map(t => t.id === activeId ? { ...t, column_id: overId as string } : t));
         await supabase.from('tasks').update({ column_id: overId }).eq('id', activeId);
@@ -103,9 +98,11 @@ export default function KanbanBoard() {
     if (activeTask) {
       const overTask = tasks.find(t => t.id === overId);
       if (overTask && activeTask.column_id !== overTask.column_id) {
+        // Farklı sütundaki bir görevin üzerine bırakma
         setTasks(prev => prev.map(t => t.id === activeId ? { ...t, column_id: overTask.column_id } : t));
         await supabase.from('tasks').update({ column_id: overTask.column_id }).eq('id', activeId);
       } else {
+        // Aynı sütun içinde sıralama
         const oldIdx = tasks.findIndex(t => t.id === activeId);
         const newIdx = tasks.findIndex(t => t.id === overId);
         setTasks(arrayMove(tasks, oldIdx, newIdx));
@@ -116,33 +113,40 @@ export default function KanbanBoard() {
   if (!isMounted) return null;
 
   return (
-    <div className="flex flex-col items-center gap-8 w-full max-w-[1400px] mx-auto">
-      {/* Sütun Ekleme Paneli */}
-      <div className="flex gap-2 bg-white p-3 rounded-2xl shadow-sm border border-gray-100 w-full max-w-md">
+    <div className="flex flex-col items-center gap-8 w-full max-w-[1400px] mx-auto px-4">
+      {/* Üst Panel: Sütun Ekleme */}
+      <div className="flex gap-2 bg-white p-2 rounded-2xl shadow-sm border border-gray-100 w-full max-w-md">
         <input 
-          type="text"
-          placeholder="Yeni Sütun Başlığı..."
-          className="flex-grow px-4 py-2 outline-none text-gray-900 text-sm bg-transparent"
+          type="text" 
+          placeholder="Yeni Sütun..." 
+          className="flex-grow px-4 py-2 outline-none text-gray-900 text-sm"
           value={newColTitle}
           onChange={(e) => setNewColTitle(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAddColumn()}
         />
-        <button onClick={handleAddColumn} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-xl text-sm font-bold transition-all active:scale-95">
+        <button onClick={handleAddColumn} className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-bold active:scale-95 transition-all">
           Sütun Ekle
         </button>
       </div>
 
-      {/* Yatay Sıralanabilir Sütun Alanı */}
-      <div className="flex gap-6 overflow-x-auto pb-8 items-start w-full px-4 scrollbar-hide">
-        <DndContext collisionDetection={closestCorners} onDragEnd={onDragEnd}>
+      {/* Sürükle Bırak Alanı */}
+      <div className="flex gap-6 overflow-x-auto pb-10 items-start w-full scrollbar-hide">
+        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
           <SortableContext items={columns.map(c => c.id)} strategy={horizontalListSortingStrategy}>
             {columns.map(col => (
               <Column 
                 key={col.id} 
                 column={col} 
                 tasks={tasks.filter(t => t.column_id === col.id)} 
-                onAddTask={handleAddTask}
-                onDeleteTask={handleDeleteTask}
+                onAddTask={async (colId: string, title: string) => {
+                  const newTask = { id: uuidv4(), column_id: colId, title, position: tasks.length + 1 };
+                  setTasks([...tasks, newTask]);
+                  await supabase.from('tasks').insert(newTask);
+                }}
+                onDeleteTask={async (id: string) => {
+                  setTasks(tasks.filter(t => t.id !== id));
+                  await supabase.from('tasks').delete().eq('id', id);
+                }}
                 onDeleteColumn={handleDeleteColumn}
               />
             ))}
