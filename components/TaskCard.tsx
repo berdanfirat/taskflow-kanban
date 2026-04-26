@@ -22,8 +22,8 @@ export function TaskCard({ task, onDeleteTask, isOverlay }: any) {
   }
 
   const priority = task.priority || 'Orta';
-  const dueDate = task.due_date || 'Belirtilmedi';
-  const assignee = task.assignee || 'Berdan Fırat';
+  const dueDate = task.due_date || '';
+  const assignee = task.assignee || 'Anon';
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners} className={`group bg-white p-4 rounded-xl shadow-sm border hover:border-indigo-300 transition-all cursor-grab active:cursor-grabbing relative touch-none select-none ${isOverlay ? 'border-indigo-500 shadow-xl scale-105 rotate-2' : 'border-gray-200'}`}>
