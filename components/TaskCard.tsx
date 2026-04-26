@@ -22,7 +22,11 @@ export function TaskCard({ task, onDeleteTask }: any) {
         <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${priority === 'Yüksek' ? 'bg-red-100 text-red-700' : priority === 'Orta' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
           {priority}
         </span>
-        <button onClick={() => onDeleteTask(task.id)} onPointerDown={(e) => e.stopPropagation()} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1">
+        <button 
+          onClick={() => onDeleteTask(task.id)} 
+          onPointerDown={(e) => e.stopPropagation()} 
+          className="text-gray-400 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-1"
+        >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
         </button>
       </div>
