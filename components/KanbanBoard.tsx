@@ -20,13 +20,12 @@ export default function KanbanBoard() {
   const [isMounted, setIsMounted] = useState(false);
   const [newColTitle, setNewColTitle] = useState('');
 
-  // SENSÖRLER: Mobil ve Masaüstü ayrımı için kritik ayar
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 5 }, // 5px hareket etmeden sürükleme başlamaz (tıklama ile karışmaz)
+      activationConstraint: { distance: 5 },
     }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 250, tolerance: 5 }, // Mobilde 250ms basılı tutunca sürükleme başlar (scroll ile karışmaz)
+      activationConstraint: { delay: 250, tolerance: 5 },
     })
   );
 
@@ -61,33 +60,26 @@ export default function KanbanBoard() {
   const onDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over) return;
-
     const activeId = active.id;
     const overId = over.id;
-
     if (activeId === overId) return;
 
-    // A. SÜTUN TAŞIMA (YATAY)
     const isActiveAColumn = active.data.current?.type === 'Column';
     if (isActiveAColumn) {
       const oldIndex = columns.findIndex(c => c.id === activeId);
       const newIndex = columns.findIndex(c => c.id === overId);
       const newCols = arrayMove(columns, oldIndex, newIndex);
       setColumns(newCols);
-      
-      // DB'de pozisyonları güncelle
       newCols.forEach(async (col, idx) => {
         await supabase.from('columns').update({ position: idx }).eq('id', col.id);
       });
       return;
     }
 
-    // B. GÖREV TAŞIMA (DİKEY VE SÜTUNLAR ARASI)
     const activeTask = tasks.find(t => t.id === activeId);
     const isOverAColumn = columns.some(col => col.id === overId);
 
     if (isOverAColumn && activeTask) {
-      // Boş sütuna bırakma
       if (activeTask.column_id !== overId) {
         setTasks(prev => prev.map(t => t.id === activeId ? { ...t, column_id: overId as string } : t));
         await supabase.from('tasks').update({ column_id: overId }).eq('id', activeId);
@@ -98,11 +90,9 @@ export default function KanbanBoard() {
     if (activeTask) {
       const overTask = tasks.find(t => t.id === overId);
       if (overTask && activeTask.column_id !== overTask.column_id) {
-        // Farklı sütundaki bir görevin üzerine bırakma
         setTasks(prev => prev.map(t => t.id === activeId ? { ...t, column_id: overTask.column_id } : t));
         await supabase.from('tasks').update({ column_id: overTask.column_id }).eq('id', activeId);
       } else {
-        // Aynı sütun içinde sıralama
         const oldIdx = tasks.findIndex(t => t.id === activeId);
         const newIdx = tasks.findIndex(t => t.id === overId);
         setTasks(arrayMove(tasks, oldIdx, newIdx));
@@ -114,7 +104,6 @@ export default function KanbanBoard() {
 
   return (
     <div className="flex flex-col items-center gap-8 w-full max-w-[1400px] mx-auto px-4">
-      {/* Üst Panel: Sütun Ekleme */}
       <div className="flex gap-2 bg-white p-2 rounded-2xl shadow-sm border border-gray-100 w-full max-w-md">
         <input 
           type="text" 
@@ -129,7 +118,6 @@ export default function KanbanBoard() {
         </button>
       </div>
 
-      {/* Sürükle Bırak Alanı */}
       <div className="flex gap-6 overflow-x-auto pb-10 items-start w-full scrollbar-hide">
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
           <SortableContext items={columns.map(c => c.id)} strategy={horizontalListSortingStrategy}>
@@ -138,11 +126,26 @@ export default function KanbanBoard() {
                 key={col.id} 
                 column={col} 
                 tasks={tasks.filter(t => t.column_id === col.id)} 
-                onAddTask={async (colId: string, title: string) => {
-                  const newTask = { id: uuidv4(), column_id: colId, title, position: tasks.length + 1 };
+                
+                // YENİ BÖLÜM: Parametreler alındı ve objeye aktarıldı
+                onAddTask={async (colId: string, title: string, priority: string, dueDate: string, assignee: string) => {
+                  const formattedDate = dueDate ? new Date(dueDate).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }) : 'Belirtilmedi';
+                  const finalAssignee = assignee.trim() !== '' ? assignee : 'BF';
+
+                  const newTask = { 
+                    id: uuidv4(), 
+                    column_id: colId, 
+                    title, 
+                    position: tasks.length + 1,
+                    priority,
+                    due_date: formattedDate,
+                    assignee: finalAssignee
+                  };
+                  
                   setTasks([...tasks, newTask]);
                   await supabase.from('tasks').insert(newTask);
                 }}
+                
                 onDeleteTask={async (id: string) => {
                   setTasks(tasks.filter(t => t.id !== id));
                   await supabase.from('tasks').delete().eq('id', id);

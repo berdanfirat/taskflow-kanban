@@ -8,13 +8,17 @@ import { TaskCard } from './TaskCard';
 export function Column({ column, tasks, onAddTask, onDeleteTask, onDeleteColumn }: any) {
   const [isAdding, setIsAdding] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
+  
+  // YENİ: Form state'leri
+  const [newPriority, setNewPriority] = useState('Orta');
+  const [newDueDate, setNewDueDate] = useState('');
+  const [newAssignee, setNewAssignee] = useState('');
 
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: column.id,
     data: { type: 'Column', column }
   });
 
-  // Boş sütunlara kart bırakabilmek için droppable referansı
   const { setNodeRef: setDroppableRef } = useDroppable({ id: column.id });
 
   const style = {
@@ -28,14 +32,16 @@ export function Column({ column, tasks, onAddTask, onDeleteTask, onDeleteColumn 
 
   const handleAdd = () => {
     if (!newTaskTitle.trim()) { setIsAdding(false); return; }
-    onAddTask(column.id, newTaskTitle);
+    onAddTask(column.id, newTaskTitle, newPriority, newDueDate, newAssignee);
     setNewTaskTitle('');
+    setNewPriority('Orta');
+    setNewDueDate('');
+    setNewAssignee('');
     setIsAdding(false);
   };
 
   return (
     <div ref={setNodeRef} style={style} className="bg-gray-100 w-80 min-w-[320px] rounded-2xl p-4 flex flex-col gap-4 min-h-[500px] shadow-sm border border-gray-200 group/col">
-      {/* Sütun Başlığı ve Drag Handle */}
       <div className="flex items-center justify-between px-1">
         <div {...attributes} {...listeners} className="flex items-center gap-2 cursor-grab active:cursor-grabbing grow">
           <h2 className="font-bold text-gray-700 text-xs uppercase tracking-widest">{column.title}</h2>
@@ -46,7 +52,6 @@ export function Column({ column, tasks, onAddTask, onDeleteTask, onDeleteColumn 
         </button>
       </div>
 
-      {/* Görev Listesi Alanı */}
       <div ref={setDroppableRef} className="flex flex-col gap-3 flex-grow">
         <SortableContext items={tasks.map((t: any) => t.id)} strategy={verticalListSortingStrategy}>
           {tasks.map((task: any) => (
@@ -55,18 +60,47 @@ export function Column({ column, tasks, onAddTask, onDeleteTask, onDeleteColumn 
         </SortableContext>
         
         {isAdding ? (
-          <div className="bg-white p-3 rounded-xl shadow-md border-2 border-indigo-400 animate-in fade-in slide-in-from-top-2">
+          <div className="bg-white p-3 rounded-xl shadow-md border-2 border-indigo-400 animate-in fade-in slide-in-from-top-2 flex flex-col gap-2">
             <input
               autoFocus
-              className="w-full text-sm outline-none text-gray-900 bg-white mb-3"
+              className="w-full text-sm font-semibold outline-none text-gray-900 bg-white placeholder-gray-400"
               placeholder="Görev adı..."
               value={newTaskTitle}
               onChange={(e) => setNewTaskTitle(e.target.value)}
+            />
+            
+            <div className="flex gap-2">
+              <select 
+                className="text-xs bg-gray-50 border border-gray-200 rounded p-1 outline-none text-gray-700"
+                value={newPriority}
+                onChange={(e) => setNewPriority(e.target.value)}
+              >
+                <option value="Düşük">Düşük</option>
+                <option value="Orta">Orta</option>
+                <option value="Yüksek">Yüksek</option>
+              </select>
+
+              <input 
+                type="date" 
+                className="text-xs bg-gray-50 border border-gray-200 rounded p-1 outline-none text-gray-700 w-full"
+                value={newDueDate}
+                onChange={(e) => setNewDueDate(e.target.value)}
+              />
+            </div>
+
+            <input 
+              type="text" 
+              maxLength={2}
+              placeholder="Sorumlu (Örn: BF)"
+              className="text-xs bg-gray-50 border border-gray-200 rounded p-1.5 outline-none text-gray-700 uppercase"
+              value={newAssignee}
+              onChange={(e) => setNewAssignee(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
             />
-            <div className="flex gap-2">
-              <button onClick={handleAdd} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">Kaydet</button>
-              <button onClick={() => setIsAdding(false)} className="text-gray-400 text-xs font-medium px-2">İptal</button>
+
+            <div className="flex gap-2 mt-1">
+              <button onClick={handleAdd} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold w-full hover:bg-indigo-700">Kaydet</button>
+              <button onClick={() => setIsAdding(false)} className="text-gray-500 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg text-xs font-medium w-full">İptal</button>
             </div>
           </div>
         ) : (
