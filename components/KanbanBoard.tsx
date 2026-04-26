@@ -1,21 +1,21 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { DndContext, closestCorners, DragEndEvent, DragStartEvent, PointerSensor, TouchSensor, useSensor, useSensors, DragOverlay } from '@dnd-kit/core';
+import { DndContext, closestCorners, DragEndEvent, DragOverEvent, DragStartEvent, PointerSensor, TouchSensor, useSensor, useSensors, DragOverlay } from '@dnd-kit/core';
 import { arrayMove, SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
 import { v4 as uuidv4 } from 'uuid';
 import { Column } from './Column';
-import { TaskCard } from './TaskCard'; // Overlay için eklendi
+import { TaskCard } from './TaskCard';
 import { supabase } from '../lib/supabaseClient';
 
 export default function KanbanBoard() {
   const [columns, setColumns] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
-  const [logs, setLogs] = useState<any[]>([]); // YENİ: Geçmiş verisi
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false); // YENİ: Çekmece durumu
+  const [logs, setLogs] = useState<any[]>([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   
-  // YENİ: Sürüklenen öğeyi takip etme (Overlay için)
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<'Column' | 'Task' | null>(null);
+  const [startColId, setStartColId] = useState<string | null>(null); // Sürükleme başlangıç noktası
 
   const [isMounted, setIsMounted] = useState(false);
   const [newColTitle, setNewColTitle] = useState('');
@@ -25,7 +25,20 @@ export default function KanbanBoard() {
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
   );
 
-  useEffect(() => { setIsMounted(true); fetchData(); fetchLogs(); }, []);
+  useEffect(() => { 
+    setIsMounted(true); 
+    fetchData(); 
+    fetchLogs(); 
+
+    // YENİ: REALTIME (GERÇEK ZAMANLI) BAĞLANTI
+    const channel = supabase.channel('public-tasks')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'columns' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_logs' }, () => fetchLogs())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   const fetchData = async () => {
     const { data: cols } = await supabase.from('columns').select('*').order('position', { ascending: true });
@@ -39,23 +52,67 @@ export default function KanbanBoard() {
     if (data) setLogs(data);
   };
 
-  // Aktivite kaydetme fonksiyonu
   const logActivity = async (taskTitle: string, fromColId: string, toColId: string) => {
     const fromCol = columns.find(c => c.id === fromColId)?.title || 'Bilinmiyor';
     const toCol = columns.find(c => c.id === toColId)?.title || 'Bilinmiyor';
-    
     const newLog = { task_title: taskTitle, from_column: fromCol, to_column: toCol };
     
-    // UI'ı anında güncelle
     setLogs(prev => [{ ...newLog, created_at: new Date().toISOString() }, ...prev].slice(0, 20));
-    
-    // DB'ye yaz
     await supabase.from('activity_logs').insert(newLog);
+  };
+
+  // PANOYU PAYLAŞMA FONKSİYONU
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href);
+    alert("🔗 Pano linki kopyalandı! Arkadaşlarına göndererek gerçek zamanlı birlikte çalışabilirsiniz.");
   };
 
   const onDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
     setActiveType(event.active.data.current?.type);
+    if (event.active.data.current?.type === 'Task') {
+      setStartColId(event.active.data.current.task.column_id);
+    }
+  };
+
+  // YENİ: PÜRÜZSÜZ GEÇİŞ İÇİN (Sürüklerken anında sütun değiştirir)
+  const onDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+    
+    const activeId = active.id;
+    const overId = over.id;
+    if (activeId === overId) return;
+
+    const isActiveTask = active.data.current?.type === 'Task';
+    const isOverTask = over.data.current?.type === 'Task';
+    const isOverColumn = over.data.current?.type === 'Column';
+
+    if (!isActiveTask) return;
+
+    // Kartı başka bir kartın üzerine sürüklerken
+    if (isActiveTask && isOverTask) {
+      setTasks(prev => {
+        const activeIdx = prev.findIndex(t => t.id === activeId);
+        const overIdx = prev.findIndex(t => t.id === overId);
+        if (prev[activeIdx].column_id !== prev[overIdx].column_id) {
+          const newTasks = [...prev];
+          newTasks[activeIdx].column_id = prev[overIdx].column_id;
+          return arrayMove(newTasks, activeIdx, overIdx);
+        }
+        return arrayMove(prev, activeIdx, overIdx);
+      });
+    }
+
+    // Kartı boş bir sütuna sürüklerken
+    if (isActiveTask && isOverColumn) {
+      setTasks(prev => {
+        const activeIdx = prev.findIndex(t => t.id === activeId);
+        const newTasks = [...prev];
+        newTasks[activeIdx].column_id = overId as string;
+        return arrayMove(newTasks, activeIdx, activeIdx);
+      });
+    }
   };
 
   const onDragEnd = async (event: DragEndEvent) => {
@@ -64,42 +121,27 @@ export default function KanbanBoard() {
 
     const { active, over } = event;
     if (!over) return;
-    const activeId = active.id;
-    const overId = over.id;
-    if (activeId === overId) return;
 
-    const isActiveAColumn = active.data.current?.type === 'Column';
-    if (isActiveAColumn) {
-      const oldIdx = columns.findIndex(c => c.id === activeId);
-      const newIdx = columns.findIndex(c => c.id === overId);
+    // SÜTUN TAŞIMA DB GÜNCELLEMESİ
+    if (active.data.current?.type === 'Column') {
+      const oldIdx = columns.findIndex(c => c.id === active.id);
+      const newIdx = columns.findIndex(c => c.id === over.id);
       const newCols = arrayMove(columns, oldIdx, newIdx);
       setColumns(newCols);
       newCols.forEach(async (col, i) => await supabase.from('columns').update({ position: i }).eq('id', col.id));
       return;
     }
 
-    const activeTask = tasks.find(t => t.id === activeId);
-    const isOverAColumn = columns.some(col => col.id === overId);
-
-    if (isOverAColumn && activeTask) {
-      if (activeTask.column_id !== overId) {
-        logActivity(activeTask.title, activeTask.column_id, overId as string); // LOG KAYDI
-        setTasks(prev => prev.map(t => t.id === activeId ? { ...t, column_id: overId as string } : t));
-        await supabase.from('tasks').update({ column_id: overId }).eq('id', activeId);
-      }
-      return;
-    }
-
-    if (activeTask) {
-      const overTask = tasks.find(t => t.id === overId);
-      if (overTask && activeTask.column_id !== overTask.column_id) {
-        logActivity(activeTask.title, activeTask.column_id, overTask.column_id); // LOG KAYDI
-        setTasks(prev => prev.map(t => t.id === activeId ? { ...t, column_id: overTask.column_id } : t));
-        await supabase.from('tasks').update({ column_id: overTask.column_id }).eq('id', activeId);
-      } else {
-        const oldI = tasks.findIndex(t => t.id === activeId);
-        const newI = tasks.findIndex(t => t.id === overId);
-        setTasks(arrayMove(tasks, oldI, newI));
+    // GÖREV TAŞIMA DB GÜNCELLEMESİ (UI zaten onDragOver ile güncellendi)
+    if (active.data.current?.type === 'Task') {
+      const activeTask = tasks.find(t => t.id === active.id);
+      if (activeTask) {
+        // Eğer başlangıç sütunu ile bırakılan sütun farklıysa geçmişe kaydet
+        if (startColId && startColId !== activeTask.column_id) {
+          logActivity(activeTask.title, startColId, activeTask.column_id);
+        }
+        // DB'yi senkronize et
+        await supabase.from('tasks').update({ column_id: activeTask.column_id }).eq('id', activeTask.id);
       }
     }
   };
@@ -109,7 +151,6 @@ export default function KanbanBoard() {
   return (
     <div className="flex flex-col items-center gap-8 w-full max-w-[1400px] mx-auto px-4 relative">
       
-      {/* Üst Panel: Sütun Ekleme ve Geçmiş Butonu */}
       <div className="flex flex-col sm:flex-row justify-between w-full max-w-4xl gap-4">
         <div className="flex gap-2 bg-white p-2 rounded-2xl shadow-sm border border-gray-100 flex-grow">
           <input type="text" placeholder="Yeni Sütun..." className="flex-grow px-4 py-2 outline-none text-gray-900 text-sm" value={newColTitle} onChange={(e) => setNewColTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (async () => {
@@ -123,19 +164,26 @@ export default function KanbanBoard() {
             const newCol = { id: uuidv4(), title: newColTitle, position: columns.length + 1 };
             setColumns([...columns, newCol]); setNewColTitle('');
             await supabase.from('columns').insert(newCol);
-          }} className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-bold active:scale-95 transition-all">Ekle</button>
+          }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-sm font-bold active:scale-95 transition-all">Ekle</button>
         </div>
 
-        {/* GEÇMİŞ BUTONU */}
-        <button onClick={() => setIsHistoryOpen(true)} className="bg-white border border-gray-200 text-gray-700 px-6 py-2 rounded-2xl font-bold hover:bg-gray-50 transition-colors shadow-sm flex items-center justify-center gap-2">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          Geçmiş
-        </button>
+        <div className="flex gap-2">
+          {/* YENİ: PAYLAŞ BUTONU */}
+          <button onClick={handleShare} className="bg-indigo-50 border border-indigo-100 text-indigo-600 px-4 py-2 rounded-2xl font-bold hover:bg-indigo-100 transition-colors shadow-sm flex items-center justify-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+            <span className="hidden sm:inline">Paylaş</span>
+          </button>
+
+          <button onClick={() => setIsHistoryOpen(true)} className="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-2xl font-bold hover:bg-gray-50 transition-colors shadow-sm flex items-center justify-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <span className="hidden sm:inline">Geçmiş</span>
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-6 overflow-x-auto pb-10 items-start w-full scrollbar-hide">
-        {/* SÜRÜKLEME SENSÖRLERİ VE EVENTLERİ EKLENDİ */}
-        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+        {/* YENİ: onDragOver EKLENDİ */}
+        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}>
           <SortableContext items={columns.map(c => c.id)} strategy={horizontalListSortingStrategy}>
             {columns.map(col => (
               <Column 
@@ -159,18 +207,12 @@ export default function KanbanBoard() {
             ))}
           </SortableContext>
           
-          {/* SİHİRLİ KATMAN: DRAG OVERLAY */}
           <DragOverlay>
-            {activeId && activeType === 'Task' ? (
-              <TaskCard task={tasks.find(t => t.id === activeId)} isOverlay />
-            ) : null}
-            {/* Sütun DragOverlay istenirse buraya eklenebilir, şimdilik sadece kartlar için aktif */}
+            {activeId && activeType === 'Task' ? <TaskCard task={tasks.find(t => t.id === activeId)} isOverlay /> : null}
           </DragOverlay>
-
         </DndContext>
       </div>
 
-      {/* AKTİVİTE GEÇMİŞİ ÇEKMECESİ (SIDEBAR) */}
       {isHistoryOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/20 backdrop-blur-sm transition-opacity">
           <div className="w-full max-w-sm bg-white h-full shadow-2xl p-6 overflow-y-auto animate-in slide-in-from-right">
@@ -203,7 +245,6 @@ export default function KanbanBoard() {
           </div>
         </div>
       )}
-      
     </div>
   );
 }
