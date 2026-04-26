@@ -243,6 +243,7 @@ export default function KanbanBoard() {
         </DndContext>
       </div>
 
+
       {/* Geçmiş Paneli (Öncekiyle aynı kalabilir) */}
       {isHistoryOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/20 backdrop-blur-sm">
