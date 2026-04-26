@@ -18,11 +18,11 @@ export default function KanbanBoard() {
   
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<any>(null);
-  const [startColId, setStartColId] = useState<string | null>(null);
 
   const [isMounted, setIsMounted] = useState(false);
   const [newColTitle, setNewColTitle] = useState('');
 
+  // SENSÖR TOLERANSLARI ARTIRILDI (Takılmaları önlemek için)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
@@ -45,7 +45,6 @@ export default function KanbanBoard() {
     fetchData(); 
     fetchLogs(); 
 
-    // GERÇEK ZAMANLI (REALTIME) DİNLEME
     const channel = supabase.channel('taskflow-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'columns' }, () => fetchData())
@@ -55,15 +54,13 @@ export default function KanbanBoard() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchData, fetchLogs]);
 
-  // PAYLAŞ LİNKİ DÜZELTMESİ (FOOLPROOF)
   const handleShare = () => {
     const url = window.location.href;
-    try {
-      navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(url).then(() => {
       alert("🔗 Pano linki kopyalandı! (Gerçek zamanlı test edebilirsiniz)");
-    } catch (err) {
+    }).catch(() => {
       prompt("Kopyalamak için link:", url);
-    }
+    });
   };
 
   const onDragStart = (event: DragStartEvent) => {
@@ -71,17 +68,17 @@ export default function KanbanBoard() {
     setActiveId(active.id as string);
     if (active.data.current?.type === 'Task') {
       setActiveTask(active.data.current.task);
-      setStartColId(active.data.current.task.column_id);
     }
   };
 
-  // KART TAKILMA SORUNUNUN ÇÖZÜLDÜĞÜ YER (IMMUTABLE STATE UPDATE)
+  // 1. ÇÖZÜM: KARTLARIN SÜTUNLAR ARASI GEÇMEMESİ VE TAKILMASI
   const onDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) return;
 
-    const activeId = active.id;
-    const overId = over.id;
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
     if (activeId === overId) return;
 
     const isActiveTask = active.data.current?.type === 'Task';
@@ -90,33 +87,31 @@ export default function KanbanBoard() {
 
     if (!isActiveTask) return;
 
+    // Kartı başka bir kartın üzerine sürüklerken
     if (isOverTask) {
-      setTasks((prev) => {
-        const activeIdx = prev.findIndex((t) => t.id === activeId);
-        const overIdx = prev.findIndex((t) => t.id === overId);
+      setTasks((tasks) => {
+        const activeIndex = tasks.findIndex((t) => t.id === activeId);
+        const overIndex = tasks.findIndex((t) => t.id === overId);
         
-        // HATA BURADAYDI: Doğrudan prev objesini değiştirmek yerine KOPYASINI oluşturuyoruz
-        const newTasks = [...prev];
-        const updatedTask = { ...newTasks[activeIdx] };
-
-        if (updatedTask.column_id !== newTasks[overIdx].column_id) {
-          updatedTask.column_id = newTasks[overIdx].column_id;
-          newTasks[activeIdx] = updatedTask;
-          return arrayMove(newTasks, activeIdx, overIdx);
+        // Eğer sütunlar farklıysa kartı diğer sütuna kopyala
+        if (tasks[activeIndex].column_id !== tasks[overIndex].column_id) {
+          const newTasks = [...tasks];
+          newTasks[activeIndex] = { ...newTasks[activeIndex], column_id: tasks[overIndex].column_id };
+          return arrayMove(newTasks, activeIndex, overIndex - 1);
         }
-        return arrayMove(newTasks, activeIdx, overIdx);
+        
+        // Aynı sütundaysa sadece yerini değiştir
+        return arrayMove(tasks, activeIndex, overIndex);
       });
     }
 
+    // Kartı BOŞ bir sütuna sürüklerken
     if (isOverColumn) {
-      setTasks((prev) => {
-        const activeIdx = prev.findIndex((t) => t.id === activeId);
-        const newTasks = [...prev];
-        const updatedTask = { ...newTasks[activeIdx] };
-        
-        updatedTask.column_id = overId as string;
-        newTasks[activeIdx] = updatedTask;
-        return arrayMove(newTasks, activeIdx, activeIdx);
+      setTasks((tasks) => {
+        const activeIndex = tasks.findIndex((t) => t.id === activeId);
+        const newTasks = [...tasks];
+        newTasks[activeIndex] = { ...newTasks[activeIndex], column_id: overId };
+        return arrayMove(newTasks, activeIndex, activeIndex);
       });
     }
   };
@@ -128,7 +123,7 @@ export default function KanbanBoard() {
 
     if (!over) return;
 
-    // Sütun Taşıma İşlemi
+    // A. Sütun Taşıma
     if (active.data.current?.type === 'Column') {
       const oldIdx = columns.findIndex(c => c.id === active.id);
       const newIdx = columns.findIndex(c => c.id === over.id);
@@ -138,28 +133,29 @@ export default function KanbanBoard() {
       return;
     }
 
-    // Görev Taşıma Sonrası Veritabanı ve Log Güncelleme
+    // B. Görev Taşıma ve 2. ÇÖZÜM: AKTİVİTE GEÇMİŞİ (State hatası giderildi)
     if (active.data.current?.type === 'Task') {
-      const task = tasks.find(t => t.id === active.id);
-      if (task) {
-        // Eğer sütun değiştiyse Log oluştur
-        if (startColId && startColId !== task.column_id) {
-          const fromTitle = columns.find(c => c.id === startColId)?.title || "Bilinmeyen Sütun";
-          const toTitle = columns.find(c => c.id === task.column_id)?.title || "Bilinmeyen Sütun";
+      const currentTaskState = tasks.find(t => t.id === active.id);
+      const originalTaskData = active.data.current.task; // Sürüklenmeye başladığı andaki ham veri
+
+      if (currentTaskState) {
+        // Eğer görev başka bir sütuna geçmişse LOG kaydı oluştur
+        if (originalTaskData.column_id !== currentTaskState.column_id) {
+          const fromTitle = columns.find(c => c.id === originalTaskData.column_id)?.title || "Bilinmeyen Sütun";
+          const toTitle = columns.find(c => c.id === currentTaskState.column_id)?.title || "Bilinmeyen Sütun";
           
-          const { error: logError } = await supabase.from('activity_logs').insert({
-            task_title: task.title,
+          await supabase.from('activity_logs').insert({
+            task_title: originalTaskData.title,
             from_column: fromTitle,
             to_column: toTitle
           });
-          if (logError) console.error("Log hatası:", logError);
         }
 
-        // DB Pozisyon Güncelleme
+        // DB'yi yeni sütun id'si ve yeni pozisyonuyla güncelle
         await supabase.from('tasks').update({ 
-          column_id: task.column_id,
-          position: tasks.filter(t => t.column_id === task.column_id).findIndex(t => t.id === task.id) 
-        }).eq('id', task.id);
+          column_id: currentTaskState.column_id,
+          position: tasks.filter(t => t.column_id === currentTaskState.column_id).findIndex(t => t.id === currentTaskState.id) 
+        }).eq('id', currentTaskState.id);
       }
     }
   };
