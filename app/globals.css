@@ -1,11 +1,34 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-/* MOBİL KAYDIRMA (OVERSCROLL) VE SİYAH EKRAN DÜZELTMESİ */
+:root {
+  /* Uygulamanın varsayılan renkleri (bg-gray-50 ve text-gray-900) */
+  --background: #f9fafb; 
+  --foreground: #111827;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* KRİTİK DÜZELTME: Telefon karanlık modda (Dark Mode) olsa bile 
+  alttan siyah renk fırlamasını engellemek için arka planı açık griye kilitliyoruz. 
+*/
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #f9fafb; 
+    --foreground: #111827;
+  }
+}
+
 html, body {
-  background-color: #f9fafb; /* Tailwind'deki bg-gray-50 */
-  color: #111827; /* text-gray-900 */
-  overflow-x: hidden; /* Sağa sola kayarken çıkan siyah boşluğu engeller */
-  overscroll-behavior-y: none; /* Sayfanın aşağı yukarı lastik gibi esnemesini durdurur */
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  
+  /* MOBİL DOKUNUŞLARI (KAYMAYI ENGELLEYEN KISIM) */
+  overflow-x: hidden; /* Sağa sola kayarken çıkan boşlukları engeller */
+  overscroll-behavior-y: none; /* Sayfanın aşağı-yukarı lastik gibi esnemesini durdurur */
 }
