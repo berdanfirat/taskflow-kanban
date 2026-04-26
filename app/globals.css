@@ -1,7 +1,6 @@
 @import "tailwindcss";
 
 :root {
-  /* Uygulamanın varsayılan renkleri (bg-gray-50 ve text-gray-900) */
   --background: #f9fafb; 
   --foreground: #111827;
 }
@@ -13,9 +12,7 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* KRİTİK DÜZELTME: Telefon karanlık modda (Dark Mode) olsa bile 
-  alttan siyah renk fırlamasını engellemek için arka planı açık griye kilitliyoruz. 
-*/
+/* Telefon karanlık modda olsa bile alttaki siyah katmanı açık griye kilitliyoruz */
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #f9fafb; 
@@ -27,8 +24,6 @@ html, body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
-  
-  /* MOBİL DOKUNUŞLARI (KAYMAYI ENGELLEYEN KISIM) */
-  overflow-x: hidden; /* Sağa sola kayarken çıkan boşlukları engeller */
+  overflow-x: hidden;
   overscroll-behavior-y: none; /* Sayfanın aşağı-yukarı lastik gibi esnemesini durdurur */
 }

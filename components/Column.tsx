@@ -8,8 +8,6 @@ import { TaskCard } from './TaskCard';
 export function Column({ column, tasks, onAddTask, onDeleteTask, onDeleteColumn }: any) {
   const [isAdding, setIsAdding] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
-  
-  // YENİ: Form state'leri
   const [newPriority, setNewPriority] = useState('Orta');
   const [newDueDate, setNewDueDate] = useState('');
   const [newAssignee, setNewAssignee] = useState('');
@@ -21,23 +19,14 @@ export function Column({ column, tasks, onAddTask, onDeleteTask, onDeleteColumn 
 
   const { setNodeRef: setDroppableRef } = useDroppable({ id: column.id });
 
-  const style = {
-    transition,
-    transform: CSS.Transform.toString(transform),
-  };
+  const style = { transition, transform: CSS.Transform.toString(transform) };
 
-  if (isDragging) {
-    return <div ref={setNodeRef} style={style} className="bg-indigo-100/50 w-80 min-w-[320px] h-[600px] rounded-2xl border-2 border-indigo-300 border-dashed" />;
-  }
+  if (isDragging) return <div ref={setNodeRef} style={style} className="bg-indigo-100/50 w-80 min-w-[320px] h-[600px] rounded-2xl border-2 border-indigo-300 border-dashed" />;
 
   const handleAdd = () => {
     if (!newTaskTitle.trim()) { setIsAdding(false); return; }
     onAddTask(column.id, newTaskTitle, newPriority, newDueDate, newAssignee);
-    setNewTaskTitle('');
-    setNewPriority('Orta');
-    setNewDueDate('');
-    setNewAssignee('');
-    setIsAdding(false);
+    setNewTaskTitle(''); setNewPriority('Orta'); setNewDueDate(''); setNewAssignee(''); setIsAdding(false);
   };
 
   return (
@@ -54,59 +43,27 @@ export function Column({ column, tasks, onAddTask, onDeleteTask, onDeleteColumn 
 
       <div ref={setDroppableRef} className="flex flex-col gap-3 flex-grow">
         <SortableContext items={tasks.map((t: any) => t.id)} strategy={verticalListSortingStrategy}>
-          {tasks.map((task: any) => (
-             <TaskCard key={task.id} task={task} onDeleteTask={onDeleteTask} />
-          ))}
+          {tasks.map((task: any) => ( <TaskCard key={task.id} task={task} onDeleteTask={onDeleteTask} /> ))}
         </SortableContext>
         
         {isAdding ? (
-          <div className="bg-white p-3 rounded-xl shadow-md border-2 border-indigo-400 animate-in fade-in slide-in-from-top-2 flex flex-col gap-2">
-            <input
-              autoFocus
-              className="w-full text-sm font-semibold outline-none text-gray-900 bg-white placeholder-gray-400"
-              placeholder="Görev adı..."
-              value={newTaskTitle}
-              onChange={(e) => setNewTaskTitle(e.target.value)}
-            />
-            
+          <div className="bg-white p-3 rounded-xl shadow-md border-2 border-indigo-400 flex flex-col gap-2">
+            <input autoFocus className="w-full text-sm font-semibold outline-none text-gray-900 bg-white" placeholder="Görev adı..." value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} />
             <div className="flex gap-2">
-              <select 
-                className="text-xs bg-gray-50 border border-gray-200 rounded p-1 outline-none text-gray-700"
-                value={newPriority}
-                onChange={(e) => setNewPriority(e.target.value)}
-              >
-                <option value="Düşük">Düşük</option>
-                <option value="Orta">Orta</option>
-                <option value="Yüksek">Yüksek</option>
+              <select className="text-[10px] bg-gray-50 border border-gray-200 rounded p-1 outline-none text-gray-700 grow" value={newPriority} onChange={(e) => setNewPriority(e.target.value)}>
+                <option value="Düşük">Düşük</option><option value="Orta">Orta</option><option value="Yüksek">Yüksek</option>
               </select>
-
-              <input 
-                type="date" 
-                className="text-xs bg-gray-50 border border-gray-200 rounded p-1 outline-none text-gray-700 w-full"
-                value={newDueDate}
-                onChange={(e) => setNewDueDate(e.target.value)}
-              />
+              <input type="date" className="text-[10px] bg-gray-50 border border-gray-200 rounded p-1 outline-none text-gray-700 w-full" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} />
             </div>
-
-            <input 
-              type="text" 
-              maxLength={2}
-              placeholder="Sorumlu (Örn: BF)"
-              className="text-xs bg-gray-50 border border-gray-200 rounded p-1.5 outline-none text-gray-700 uppercase"
-              value={newAssignee}
-              onChange={(e) => setNewAssignee(e.target.value.toUpperCase())}
-              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-            />
-
+            <input type="text" placeholder="Sorumlu (Ad Soyad)" className="text-[10px] bg-gray-50 border border-gray-200 rounded p-1.5 outline-none text-gray-700" value={newAssignee} onChange={(e) => setNewAssignee(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAdd()} />
             <div className="flex gap-2 mt-1">
-              <button onClick={handleAdd} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold w-full hover:bg-indigo-700">Kaydet</button>
-              <button onClick={() => setIsAdding(false)} className="text-gray-500 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg text-xs font-medium w-full">İptal</button>
+              <button onClick={handleAdd} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold w-full">Kaydet</button>
+              <button onClick={() => setIsAdding(false)} className="text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg text-xs font-medium w-full">İptal</button>
             </div>
           </div>
         ) : (
-          <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 text-gray-400 hover:text-indigo-600 p-3 rounded-xl text-sm font-bold transition-all hover:bg-white/50 border border-transparent hover:border-gray-200 mt-auto">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-            Görev Ekle
+          <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 text-gray-400 hover:text-indigo-600 p-3 rounded-xl text-sm font-bold transition-all mt-auto hover:bg-white/50 border border-transparent hover:border-gray-200">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg> Görev Ekle
           </button>
         )}
       </div>
