@@ -11,9 +11,12 @@ export function TaskCard({ task, onDeleteTask, isOverlay }: any) {
   const style = { 
     transition, 
     transform: CSS.Transform.toString(transform),
+    // Sürüklenen asıl kartın z-index'ini yükseltelim ki üstte kalsın
     zIndex: isOverlay ? 999 : (isDragging ? 1 : 0),
   };
 
+  // KRİTİK DÜZELTME: Eğer kart overlay (havadaki kopya) DEĞİLSE ve sürükleniyorsa mavi hayaleti göster.
+  // Havadaki kopyaysa orijinal tasarımını koru.
   if (isDragging && !isOverlay) {
     return <div ref={setNodeRef} style={style} className="bg-indigo-50 border-2 border-indigo-400 border-dashed rounded-xl p-4 min-h-[120px] opacity-50" />;
   }
@@ -23,14 +26,7 @@ export function TaskCard({ task, onDeleteTask, isOverlay }: any) {
   const assignee = task.assignee || 'Berdan Fırat';
 
   return (
-    <div 
-      ref={setNodeRef} 
-      style={style} 
-      {...attributes} 
-      {...listeners} 
-      // KRİTİK DÜZELTME: touch-none kaldırıldı!
-      className={`group bg-white p-4 rounded-xl shadow-sm border hover:border-indigo-300 transition-all cursor-grab active:cursor-grabbing relative select-none ${isOverlay ? 'border-indigo-500 shadow-xl scale-105 rotate-2' : 'border-gray-200'}`}
-    >
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className={`group bg-white p-4 rounded-xl shadow-sm border hover:border-indigo-300 transition-all cursor-grab active:cursor-grabbing relative touch-none select-none ${isOverlay ? 'border-indigo-500 shadow-xl scale-105 rotate-2' : 'border-gray-200'}`}>
       <div className="flex justify-between items-start mb-2">
         <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${priority === 'Yüksek' ? 'bg-red-100 text-red-700' : priority === 'Orta' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
           {priority}
