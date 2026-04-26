@@ -21,7 +21,7 @@ export function Column({ column, tasks, onAddTask, onDeleteTask, onDeleteColumn 
 
   const style = { transition, transform: CSS.Transform.toString(transform) };
 
-  if (isDragging) return <div ref={setNodeRef} style={style} className="bg-indigo-100/50 w-80 min-w-[320px] h-[600px] rounded-2xl border-2 border-indigo-300 border-dashed" />;
+  if (isDragging) return <div ref={setNodeRef} style={style} className="bg-indigo-100/50 w-80 min-w-[320px] max-h-[75vh] shrink-0 rounded-2xl border-2 border-indigo-300 border-dashed" />;
 
   const handleAdd = () => {
     if (!newTaskTitle.trim()) { setIsAdding(false); return; }
@@ -30,8 +30,14 @@ export function Column({ column, tasks, onAddTask, onDeleteTask, onDeleteColumn 
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="bg-gray-100 w-80 min-w-[320px] rounded-2xl p-4 flex flex-col gap-4 min-h-[500px] shadow-sm border border-gray-200 group/col">
-      <div className="flex items-center justify-between px-1">
+    <div 
+      ref={setNodeRef} 
+      style={style} 
+      // KRİTİK DÜZELTME 1: max-h-[75vh] ve shrink-0 eklendi. Sütun ekranın %75'ini geçemez ve sıkışmaz.
+      className="bg-gray-100 w-80 min-w-[320px] max-h-[75vh] shrink-0 rounded-2xl p-4 flex flex-col gap-4 shadow-sm border border-gray-200 group/col"
+    >
+      {/* BAŞLIK KISMI (shrink-0 ile sıkışmasını engelliyoruz) */}
+      <div className="flex items-center justify-between px-1 shrink-0">
         <div {...attributes} {...listeners} className="flex items-center gap-2 cursor-grab active:cursor-grabbing grow">
           <h2 className="font-bold text-gray-700 text-xs uppercase tracking-widest">{column.title}</h2>
           <span className="bg-gray-200 text-gray-500 text-[10px] font-black px-2 py-0.5 rounded-full">{tasks.length}</span>
@@ -44,13 +50,19 @@ export function Column({ column, tasks, onAddTask, onDeleteTask, onDeleteColumn 
         </button>
       </div>
 
-      <div ref={setDroppableRef} className="flex flex-col gap-3 flex-grow">
+      {/* GÖREV LİSTESİ KISMI (İçeriden kaydırma - overflow-y-auto eklendi) */}
+      <div 
+        ref={setDroppableRef} 
+        // KRİTİK DÜZELTME 2: overflow-y-auto ve scrollbar-hide eklendi.
+        className="flex flex-col gap-3 flex-grow overflow-y-auto scrollbar-hide pb-2"
+      >
         <SortableContext items={tasks.map((t: any) => t.id)} strategy={verticalListSortingStrategy}>
           {tasks.map((task: any) => ( <TaskCard key={task.id} task={task} onDeleteTask={onDeleteTask} /> ))}
         </SortableContext>
         
+        {/* Görev Ekleme Formu */}
         {isAdding ? (
-          <div className="bg-white p-3 rounded-xl shadow-md border-2 border-indigo-400 flex flex-col gap-2">
+          <div className="bg-white p-3 rounded-xl shadow-md border-2 border-indigo-400 flex flex-col gap-2 shrink-0">
             <input autoFocus className="w-full text-sm font-semibold outline-none text-gray-900 bg-white" placeholder="Görev adı..." value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} />
             <div className="flex gap-2">
               <select className="text-[10px] bg-gray-50 border border-gray-200 rounded p-1 outline-none text-gray-700 grow" value={newPriority} onChange={(e) => setNewPriority(e.target.value)}>
@@ -65,7 +77,7 @@ export function Column({ column, tasks, onAddTask, onDeleteTask, onDeleteColumn 
             </div>
           </div>
         ) : (
-          <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 text-gray-400 hover:text-indigo-600 p-3 rounded-xl text-sm font-bold transition-all mt-auto hover:bg-white/50 border border-transparent hover:border-gray-200">
+          <button onClick={() => setIsAdding(true)} className="flex items-center gap-2 text-gray-400 hover:text-indigo-600 p-3 rounded-xl text-sm font-bold transition-all mt-auto hover:bg-white/50 border border-transparent hover:border-gray-200 shrink-0">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg> Görev Ekle
           </button>
         )}
