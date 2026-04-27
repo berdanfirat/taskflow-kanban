@@ -34,18 +34,28 @@ export default function KanbanBoard() {
   };
 
   const fetchLogs = async () => {
-    const { data } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(20);
+    const { data } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(30);
     if (data) setLogs(data);
   };
 
   const logActivity = async (taskTitle: string, fromColId: string, toColId: string) => {
     const fromCol = columns.find(c => c.id === fromColId)?.title || 'Bilinmiyor';
     const toCol = columns.find(c => c.id === toColId)?.title || 'Bilinmiyor';
-    
     const newLog = { task_title: taskTitle, from_column: fromCol, to_column: toCol };
     
-    setLogs(prev => [{ ...newLog, created_at: new Date().toISOString() }, ...prev].slice(0, 20));
+    setLogs(prev => [{ ...newLog, created_at: new Date().toISOString() }, ...prev].slice(0, 30));
     await supabase.from('activity_logs').insert(newLog);
+  };
+
+  // YENİ: GEÇMİŞİ TEMİZLEME FONKSİYONU
+  const handleClearHistory = async () => {
+    if (!confirm("Tüm hareket geçmişini silmek istediğinize emin misiniz?")) return;
+    
+    // Ekranda anında temizle
+    setLogs([]);
+    
+    // Veritabanından tüm logları sil (UUID'si null olmayan her şeyi silmek güvenli bir hacktir)
+    await supabase.from('activity_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   };
 
   const onDragStart = (event: DragStartEvent) => {
@@ -102,10 +112,10 @@ export default function KanbanBoard() {
   if (!isMounted) return null;
 
   return (
-    <div className="flex flex-col items-center w-full max-w-[1400px] mx-auto relative">
+    <div className="flex flex-col items-center w-full max-w-[1400px] mx-auto min-h-full">
       
-      {/* KRİTİK DÜZELTME: Sticky Header Alanı */}
-      <div className="sticky top-0 z-40 w-full bg-gray-50/95 backdrop-blur-md pt-2 pb-6 px-4 mb-4 flex justify-center border-b border-transparent transition-all">
+      {/* KRİTİK DEĞİŞİKLİK: Sticky Panel (Aşağı kaysan da üstte yapışık kalır) */}
+      <div className="sticky top-0 z-40 w-full bg-gray-50/95 backdrop-blur-md pt-4 pb-4 px-4 shadow-sm border-b border-gray-200/50 flex justify-center">
         <div className="flex flex-col sm:flex-row justify-between w-full max-w-4xl gap-4">
           <div className="flex gap-2 bg-white p-2 rounded-2xl shadow-sm border border-gray-100 flex-grow">
             <input type="text" placeholder="Yeni Sütun..." className="flex-grow px-4 py-2 outline-none text-gray-900 text-sm" value={newColTitle} onChange={(e) => setNewColTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (async () => {
@@ -130,7 +140,7 @@ export default function KanbanBoard() {
       </div>
 
       {/* Sürükle Bırak Alanı */}
-      <div className="flex gap-6 overflow-x-auto pb-10 items-start w-full px-4 scrollbar-hide">
+      <div className="flex gap-6 overflow-x-auto pb-10 pt-4 items-start w-full px-4 scrollbar-hide flex-1">
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragEnd={onDragEnd}>
           <SortableContext items={columns.map(c => c.id)} strategy={horizontalListSortingStrategy}>
             {columns.map(col => (
@@ -160,26 +170,37 @@ export default function KanbanBoard() {
               <TaskCard task={tasks.find(t => t.id === activeId)} isOverlay />
             ) : null}
           </DragOverlay>
-
         </DndContext>
       </div>
 
+      {/* Geçmiş Paneli */}
       {isHistoryOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/20 backdrop-blur-sm transition-opacity">
           <div className="w-full max-w-sm bg-white h-full shadow-2xl p-6 overflow-y-auto animate-in slide-in-from-right">
+            
+            {/* GEÇMİŞ BAŞLIĞI VE SİLME BUTONU */}
             <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-100">
               <h2 className="text-xl font-black text-gray-800 flex items-center gap-2">
                 <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                Hareket Geçmişi
+                Geçmiş
               </h2>
-              <button onClick={() => setIsHistoryOpen(false)} className="text-gray-400 hover:text-red-500 bg-gray-50 p-2 rounded-full transition-colors">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
+              
+              <div className="flex items-center gap-3">
+                {/* YENİ: Temizle Butonu */}
+                {logs.length > 0 && (
+                  <button onClick={handleClearHistory} className="text-[11px] font-bold text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors">
+                    Temizle
+                  </button>
+                )}
+                <button onClick={() => setIsHistoryOpen(false)} className="text-gray-400 hover:text-red-500 bg-gray-50 p-2 rounded-full transition-colors">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
             </div>
             
             <div className="flex flex-col gap-4">
               {logs.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center mt-10">Henüz bir hareket yok.</p>
+                <p className="text-sm text-gray-400 text-center mt-10 font-medium">Henüz bir hareket yok.</p>
               ) : (
                 logs.map((log, i) => (
                   <div key={i} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
